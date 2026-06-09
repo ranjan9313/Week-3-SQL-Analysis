@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Superstore SQL Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f7f4; color: #1a1a18; line-height: 1.6; }
+  .page { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+  h1 { font-size: 26px; font-weight: 600; margin-bottom: 0.25rem; color: #1a1a18; }
+  .subtitle { font-size: 14px; color: #888; margin-bottom: 2rem; }
+  .section { margin-bottom: 3rem; }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1.5px solid #e0ddd6; }
+  .section-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-subquery { background: #ede9fe; color: #5b21b6; }
+  .badge-cte { background: #d1fae5; color: #065f46; }
+  .badge-window { background: #dbeafe; color: #1e40af; }
+  .badge-combined { background: #fef3c7; color: #92400e; }
+  .badge-business { background: #fce7f3; color: #9d174d; }
+  .section-title { font-size: 17px; font-weight: 600; }
+  .insight-box { background: #fff; border: 1px solid #e8e5de; border-left: 4px solid; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; font-size: 14px; }
+  .insight-box.blue { border-left-color: #3b82f6; }
+  .insight-box.green { border-left-color: #10b981; }
+  .insight-box.amber { border-left-color: #f59e0b; }
+  .insight-box.purple { border-left-color: #8b5cf6; }
+  .insight-box.pink { border-left-color: #ec4899; }
+  .insight-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 4px; }
+  .insight-text { color: #444; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e8e5de; font-size: 13px; }
+  thead tr { background: #f4f2ed; }
+  th { padding: 10px 14px; text-align: left; font-weight: 600; color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+  td { padding: 9px 14px; border-top: 1px solid #f0ede6; color: #333; }
+  tr:hover td { background: #fafaf7; }
+  .number { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos { color: #059669; }
+  .neg { color: #dc2626; }
+  .rank-badge { display: inline-block; width: 24px; height: 24px; border-radius: 50%; font-size: 11px; font-weight: 700; text-align: center; line-height: 24px; }
+  .rank-1 { background: #fef3c7; color: #92400e; }
+  .rank-2 { background: #f1f5f9; color: #475569; }
+  .rank-3 { background: #fdf2ec; color: #92400e; }
+  .rank-n { background: #f4f2ed; color: #888; }
+  .tier-pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+  .tier-1 { background: #d1fae5; color: #065f46; }
+  .tier-2 { background: #dbeafe; color: #1e40af; }
+  .tier-3 { background: #fef3c7; color: #92400e; }
+  .tier-4 { background: #fee2e2; color: #991b1b; }
+  .above { background: #d1fae5; color: #065f46; font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; }
+  .below { background: #fee2e2; color: #991b1b; font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+  .metric-card { background: #fff; border: 1px solid #e8e5de; border-radius: 10px; padding: 1rem; }
+  .metric-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 600; }
+  .metric-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .chart-wrap { background: #fff; border: 1px solid #e8e5de; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+  .chart-title { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 1rem; }
+  .sql-block { background: #1e1e2e; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; overflow-x: auto; }
+  .sql-block pre { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.7; color: #cdd6f4; }
+  .kw { color: #89b4fa; font-weight: 600; }
+  .fn { color: #a6e3a1; }
+  .cm { color: #6c7086; font-style: italic; }
+  .str { color: #f9e2af; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .tab { padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 1px solid #e0ddd6; background: #fff; color: #555; transition: all 0.15s; }
+  .tab.active { background: #1a1a18; color: #fff; border-color: #1a1a18; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .nav { display: flex; gap: 6px; margin-bottom: 2rem; flex-wrap: wrap; }
+  .nav a { font-size: 13px; padding: 5px 12px; background: #fff; border: 1px solid #e0ddd6; border-radius: 20px; text-decoration: none; color: #555; }
+  .nav a:hover { background: #f4f2ed; }
+  @media (max-width: 600px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>🗃️ Superstore Sales SQL Analysis</h1>
+  <p class="subtitle">9,994 order rows · 793 customers · 1,862 products · SQLite 3.45 · Techniques: Subqueries, CTEs, Window Functions</p>
+
+  <nav class="nav">
+    <a href="#overview">Overview</a>
+    <a href="#subqueries">Subqueries</a>
+    <a href="#cte">CTEs</a>
+    <a href="#window">Window Functions</a>
+    <a href="#combined">Combined</a>
+    <a href="#business">Business Queries</a>
+  </nav>
+
+  <!-- OVERVIEW METRICS -->
+  <div id="overview" class="section">
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total Revenue</div>
+        <div class="metric-value">$2.30M</div>
+        <div class="metric-sub">9,994 order lines</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total Profit</div>
+        <div class="metric-value" style="color:#059669">$286K</div>
+        <div class="metric-sub">12.5% margin</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Customers</div>
+        <div class="metric-value">793</div>
+        <div class="metric-sub">12 single-order</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Order Value</div>
+        <div class="metric-value">$229.86</div>
+        <div class="metric-sub">Median: $54.49</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-title">Revenue & Profit by Category</div>
+      <div style="position:relative;height:220px">
+        <canvas id="catChart" role="img" aria-label="Bar chart showing revenue and profit by product category. Technology leads in both.">Technology: $836K revenue, Office Supplies: $719K, Furniture: $742K.</canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUBQUERIES -->
+  <div id="subqueries" class="section">
+    <div class="section-header">
+      <span class="section-badge badge-subquery">Subqueries</span>
+      <span class="section-title">Filtering with scalar &amp; correlated subqueries</span>
+    </div>
+
+    <div class="insight-box blue">
+      <div class="insight-label">How it works</div>
+      <div class="insight-text"><strong>Scalar subquery</strong> (<code>WHERE sales &gt; (SELECT AVG(sales)…)</code>) computes one value once and filters rows against it. <strong>Correlated subquery</strong> re-executes for every outer row, comparing against a per-customer MAX.</div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('sq','sq1')">Above-Average Sales</div>
+      <div class="tab" onclick="switchTab('sq','sq2')">Top Order / Customer</div>
+    </div>
+
+    <div id="sq1" class="tab-content active">
+      <div class="sql-block"><pre><span class="kw">SELECT</span> o.order_id, c.customer_name, p.category, <span class="fn">ROUND</span>(o.sales, 2) <span class="kw">AS</span> sales
+<span class="kw">FROM</span>   orders o
+<span class="kw">JOIN</span>   customers c <span class="kw">USING</span>(customer_id)
+<span class="kw">JOIN</span>   products  p <span class="kw">USING</span>(product_id)
+<span class="kw">WHERE</span>  o.sales &gt; (<span class="kw">SELECT</span> <span class="fn">AVG</span>(sales) <span class="kw">FROM</span> orders)  <span class="cm">-- scalar subquery</span>
+<span class="kw">ORDER</span>  <span class="kw">BY</span> o.sales <span class="kw">DESC</span> <span class="kw">LIMIT</span> 10;</pre></div>
+      <table>
+        <thead><tr><th>Order ID</th><th>Customer</th><th>Category</th><th class="number">Sales</th></tr></thead>
+        <tbody>
+          <tr><td>CA-2014-145317</td><td>Sean Miller</td><td>Technology</td><td class="number">$22,638.48</td></tr>
+          <tr><td>CA-2016-118689</td><td>Tamara Chand</td><td>Technology</td><td class="number">$17,499.95</td></tr>
+          <tr><td>CA-2017-140151</td><td>Raymond Buch</td><td>Technology</td><td class="number">$13,999.96</td></tr>
+          <tr><td>CA-2017-127180</td><td>Tom Ashbrook</td><td>Technology</td><td class="number">$11,199.97</td></tr>
+          <tr><td>CA-2017-166709</td><td>Hunter Lopez</td><td>Technology</td><td class="number">$10,499.97</td></tr>
+          <tr><td>CA-2016-117121</td><td>Adrian Barton</td><td>Office Supplies</td><td class="number">$9,892.74</td></tr>
+          <tr><td>CA-2014-116904</td><td>Sanjit Chand</td><td>Office Supplies</td><td class="number">$9,449.95</td></tr>
+          <tr><td>US-2016-107440</td><td>Bill Shonely</td><td>Technology</td><td class="number">$9,099.93</td></tr>
+          <tr><td>CA-2016-158841</td><td>Sanjit Engle</td><td>Technology</td><td class="number">$8,749.95</td></tr>
+          <tr><td>CA-2016-143714</td><td>Christopher Conant</td><td>Technology</td><td class="number">$8,399.98</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:13px;color:#888;margin-top:8px">3,756 of 9,994 rows exceed the store average of $229.86 (37.6% of orders)</p>
+    </div>
+
+    <div id="sq2" class="tab-content">
+      <div class="sql-block"><pre><span class="kw">SELECT</span> c.customer_name, o.order_id, <span class="fn">ROUND</span>(o.sales, 2) <span class="kw">AS</span> max_order_sales
+<span class="kw">FROM</span>   orders o
+<span class="kw">JOIN</span>   customers c <span class="kw">USING</span>(customer_id)
+<span class="kw">WHERE</span>  o.sales = (
+           <span class="kw">SELECT</span> <span class="fn">MAX</span>(o2.sales)
+           <span class="kw">FROM</span>   orders o2
+           <span class="kw">WHERE</span>  o2.customer_id = o.customer_id   <span class="cm">-- correlated</span>
+       )
+<span class="kw">ORDER</span>  <span class="kw">BY</span> max_order_sales <span class="kw">DESC</span> <span class="kw">LIMIT</span> 10;</pre></div>
+      <table>
+        <thead><tr><th>Customer</th><th>Best Order</th><th class="number">Sales</th></tr></thead>
+        <tbody>
+          <tr><td>Sean Miller</td><td>CA-2014-145317</td><td class="number">$22,638.48</td></tr>
+          <tr><td>Tamara Chand</td><td>CA-2016-118689</td><td class="number">$17,499.95</td></tr>
+          <tr><td>Raymond Buch</td><td>CA-2017-140151</td><td class="number">$13,999.96</td></tr>
+          <tr><td>Tom Ashbrook</td><td>CA-2017-127180</td><td class="number">$11,199.97</td></tr>
+          <tr><td>Hunter Lopez</td><td>CA-2017-166709</td><td class="number">$10,499.97</td></tr>
+          <tr><td>Adrian Barton</td><td>CA-2016-117121</td><td class="number">$9,892.74</td></tr>
+          <tr><td>Sanjit Chand</td><td>CA-2014-116904</td><td class="number">$9,449.95</td></tr>
+          <tr><td>Bill Shonely</td><td>US-2016-107440</td><td class="number">$9,099.93</td></tr>
+          <tr><td>Sanjit Engle</td><td>CA-2016-158841</td><td class="number">$8,749.95</td></tr>
+          <tr><td>Christopher Conant</td><td>CA-2016-143714</td><td class="number">$8,399.98</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CTEs -->
+  <div id="cte" class="section">
+    <div class="section-header">
+      <span class="section-badge badge-cte">CTEs</span>
+      <span class="section-title">Customer lifetime aggregation with WITH clauses</span>
+    </div>
+
+    <div class="insight-box green">
+      <div class="insight-label">How it works</div>
+      <div class="insight-text">The <code>WITH customer_sales AS (…)</code> block pre-aggregates SUM/COUNT/AVG per customer. The outer query then joins dimensions — cleaner and reusable compared to inline subqueries.</div>
+    </div>
+
+    <div class="sql-block"><pre><span class="kw">WITH</span> customer_sales <span class="kw">AS</span> (
+    <span class="kw">SELECT</span>   customer_id,
+             <span class="fn">ROUND</span>(<span class="fn">SUM</span>(sales),  2) <span class="kw">AS</span> total_sales,
+             <span class="fn">ROUND</span>(<span class="fn">SUM</span>(profit), 2) <span class="kw">AS</span> total_profit,
+             <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_id) <span class="kw">AS</span> num_orders
+    <span class="kw">FROM</span>     orders
+    <span class="kw">GROUP BY</span> customer_id
+)
+<span class="kw">SELECT</span> c.customer_name, c.segment, cs.total_sales, cs.num_orders, cs.total_profit
+<span class="kw">FROM</span>   customer_sales cs
+<span class="kw">JOIN</span>   customers c <span class="kw">USING</span>(customer_id)
+<span class="kw">ORDER</span>  <span class="kw">BY</span> cs.total_sales <span class="kw">DESC LIMIT</span> 10;</pre></div>
+
+    <table>
+      <thead><tr><th>Customer</th><th>Segment</th><th class="number">Total Sales</th><th class="number">Orders</th><th class="number">Total Profit</th></tr></thead>
+      <tbody>
+        <tr><td>Sean Miller</td><td>Home Office</td><td class="number">$25,043.05</td><td class="number">5</td><td class="number neg">-$1,980.74</td></tr>
+        <tr><td>Tamara Chand</td><td>Corporate</td><td class="number">$19,052.22</td><td class="number">5</td><td class="number pos">$8,981.32</td></tr>
+        <tr><td>Raymond Buch</td><td>Consumer</td><td class="number">$15,117.34</td><td class="number">6</td><td class="number pos">$6,976.10</td></tr>
+        <tr><td>Tom Ashbrook</td><td>Home Office</td><td class="number">$14,595.62</td><td class="number">4</td><td class="number pos">$4,703.79</td></tr>
+        <tr><td>Adrian Barton</td><td>Consumer</td><td class="number">$14,473.57</td><td class="number">10</td><td class="number pos">$5,444.81</td></tr>
+        <tr><td>Ken Lonsdale</td><td>Consumer</td><td class="number">$14,175.23</td><td class="number">12</td><td class="number pos">$806.85</td></tr>
+        <tr><td>Sanjit Chand</td><td>Consumer</td><td class="number">$14,142.33</td><td class="number">9</td><td class="number pos">$5,757.41</td></tr>
+        <tr><td>Hunter Lopez</td><td>Consumer</td><td class="number">$12,873.30</td><td class="number">6</td><td class="number pos">$5,622.43</td></tr>
+        <tr><td>Sanjit Engle</td><td>Consumer</td><td class="number">$12,209.44</td><td class="number">11</td><td class="number pos">$2,650.68</td></tr>
+        <tr><td>Christopher Conant</td><td>Consumer</td><td class="number">$12,129.07</td><td class="number">5</td><td class="number pos">$2,177.05</td></tr>
+      </tbody>
+    </table>
+    <div class="insight-box amber" style="margin-top:1rem">
+      <div class="insight-label">⚠️ Insight</div>
+      <div class="insight-text">Sean Miller is the #1 customer by sales ($25K) but has <strong style="color:#dc2626">negative profit (-$1,980)</strong> — likely due to heavy discounting. Tamara Chand (#2, $19K) is far more profitable at $8,981. High revenue doesn't equal high value.</div>
+    </div>
+  </div>
+
+  <!-- WINDOW FUNCTIONS -->
+  <div id="window" class="section">
+    <div class="section-header">
+      <span class="section-badge badge-window">Window Functions</span>
+      <span class="section-title">ROW_NUMBER and RANK for ranking and analysis</span>
+    </div>
+
+    <div class="insight-box blue">
+      <div class="insight-label">How it works</div>
+      <div class="insight-text"><code>ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY sales DESC)</code> assigns 1 to each customer's best order. <code>RANK()</code> assigns the same rank to ties, skipping the next rank — revealing true competitive position.</div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('wf','wf1')">ROW_NUMBER — Best Order</div>
+      <div class="tab" onclick="switchTab('wf','wf2')">RANK — Segment Ranking</div>
+    </div>
+
+    <div id="wf1" class="tab-content active">
+      <div class="sql-block"><pre><span class="kw">WITH</span> ranked <span class="kw">AS</span> (
+    <span class="kw">SELECT</span> order_id, customer_id, order_date,
+           <span class="fn">ROUND</span>(sales, 2) <span class="kw">AS</span> sales,
+           <span class="fn">ROW_NUMBER</span>() <span class="kw">OVER</span> (
+               <span class="kw">PARTITION BY</span> customer_id
+               <span class="kw">ORDER BY</span>     sales <span class="kw">DESC</span>
+           ) <span class="kw">AS</span> rn
+    <span class="kw">FROM</span>   orders
+)
+<span class="kw">SELECT</span> c.customer_name, r.order_id, r.order_date, r.sales
+<span class="kw">FROM</span>   ranked r <span class="kw">JOIN</span> customers c <span class="kw">USING</span>(customer_id)
+<span class="kw">WHERE</span>  r.rn = 1
+<span class="kw">ORDER</span>  <span class="kw">BY</span> r.sales <span class="kw">DESC LIMIT</span> 10;</pre></div>
+      <table>
+        <thead><tr><th>Customer</th><th>Top Order ID</th><th>Order Date</th><th class="number">Sales</th></tr></thead>
+        <tbody>
+          <tr><td>Sean Miller</td><td>CA-2014-145317</td><td>3/18/2014</td><td class="number">$22,638.48</td></tr>
+          <tr><td>Tamara Chand</td><td>CA-2016-118689</td><td>10/2/2016</td><td class="number">$17,499.95</td></tr>
+          <tr><td>Raymond Buch</td><td>CA-2017-140151</td><td>3/23/2017</td><td class="number">$13,999.96</td></tr>
+          <tr><td>Tom Ashbrook</td><td>CA-2017-127180</td><td>10/22/2017</td><td class="number">$11,199.97</td></tr>
+          <tr><td>Hunter Lopez</td><td>CA-2017-166709</td><td>11/17/2017</td><td class="number">$10,499.97</td></tr>
+          <tr><td>Adrian Barton</td><td>CA-2016-117121</td><td>12/17/2016</td><td class="number">$9,892.74</td></tr>
+          <tr><td>Sanjit Chand</td><td>CA-2014-116904</td><td>9/23/2014</td><td class="number">$9,449.95</td></tr>
+          <tr><td>Bill Shonely</td><td>US-2016-107440</td><td>4/16/2016</td><td class="number">$9,099.93</td></tr>
+          <tr><td>Sanjit Engle</td><td>CA-2016-158841</td><td>2/2/2016</td><td class="number">$8,749.95</td></tr>
+          <tr><td>Christopher Conant</td><td>CA-2016-143714</td><td>5/23/2016</td><td class="number">$8,399.98</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="wf2" class="tab-content">
+      <div class="sql-block"><pre><span class="cm">-- Two windows in one query</span>
+<span class="fn">RANK</span>() <span class="kw">OVER</span> (<span class="kw">PARTITION BY</span> c.segment <span class="kw">ORDER BY</span> cs.total_sales <span class="kw">DESC</span>) <span class="kw">AS</span> segment_rank,
+<span class="fn">RANK</span>() <span class="kw">OVER</span> (<span class="kw">ORDER BY</span> cs.total_sales <span class="kw">DESC</span>)                          <span class="kw">AS</span> overall_rank</pre></div>
+      <table>
+        <thead><tr><th>Customer</th><th>Segment</th><th class="number">Total Sales</th><th class="number">Seg. Rank</th><th class="number">Overall Rank</th></tr></thead>
+        <tbody>
+          <tr><td>Sean Miller</td><td>Home Office</td><td class="number">$25,043.05</td><td class="number"><span class="rank-badge rank-1">1</span></td><td class="number"><span class="rank-badge rank-1">1</span></td></tr>
+          <tr><td>Tamara Chand</td><td>Corporate</td><td class="number">$19,052.22</td><td class="number"><span class="rank-badge rank-1">1</span></td><td class="number"><span class="rank-badge rank-2">2</span></td></tr>
+          <tr><td>Raymond Buch</td><td>Consumer</td><td class="number">$15,117.34</td><td class="number"><span class="rank-badge rank-1">1</span></td><td class="number"><span class="rank-badge rank-3">3</span></td></tr>
+          <tr><td>Tom Ashbrook</td><td>Home Office</td><td class="number">$14,595.62</td><td class="number"><span class="rank-badge rank-2">2</span></td><td class="number"><span class="rank-badge rank-n">4</span></td></tr>
+          <tr><td>Adrian Barton</td><td>Consumer</td><td class="number">$14,473.57</td><td class="number"><span class="rank-badge rank-2">2</span></td><td class="number"><span class="rank-badge rank-n">5</span></td></tr>
+          <tr><td>Ken Lonsdale</td><td>Consumer</td><td class="number">$14,175.23</td><td class="number"><span class="rank-badge rank-3">3</span></td><td class="number"><span class="rank-badge rank-n">6</span></td></tr>
+          <tr><td>Sanjit Chand</td><td>Consumer</td><td class="number">$14,142.33</td><td class="number"><span class="rank-badge rank-n">4</span></td><td class="number"><span class="rank-badge rank-n">7</span></td></tr>
+          <tr><td>Todd Sumrall</td><td>Corporate</td><td class="number">$11,891.75</td><td class="number"><span class="rank-badge rank-2">2</span></td><td class="number"><span class="rank-badge rank-n">11</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- COMBINED -->
+  <div id="combined" class="section">
+    <div class="section-header">
+      <span class="section-badge badge-combined">Combined</span>
+      <span class="section-title">JOIN + CTE + Window Functions — full customer profile</span>
+    </div>
+
+    <div class="sql-block"><pre><span class="kw">WITH</span> sales_agg <span class="kw">AS</span> (
+    <span class="kw">SELECT</span>   customer_id,
+             <span class="fn">ROUND</span>(<span class="fn">SUM</span>(sales),  2) <span class="kw">AS</span> total_sales,
+             <span class="fn">ROUND</span>(<span class="fn">SUM</span>(profit), 2) <span class="kw">AS</span> total_profit,
+             <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_id) <span class="kw">AS</span> num_orders
+    <span class="kw">FROM</span>     orders <span class="kw">GROUP BY</span> customer_id
+),
+ranked <span class="kw">AS</span> (
+    <span class="kw">SELECT</span> *,
+           <span class="fn">RANK</span>()   <span class="kw">OVER</span> (<span class="kw">ORDER BY</span> total_sales  <span class="kw">DESC</span>) <span class="kw">AS</span> sales_rank,
+           <span class="fn">RANK</span>()   <span class="kw">OVER</span> (<span class="kw">ORDER BY</span> total_profit <span class="kw">DESC</span>) <span class="kw">AS</span> profit_rank,
+           <span class="fn">NTILE</span>(4) <span class="kw">OVER</span> (<span class="kw">ORDER BY</span> total_sales  <span class="kw">DESC</span>) <span class="kw">AS</span> sales_quartile
+    <span class="kw">FROM</span>   sales_agg
+)
+<span class="kw">SELECT</span> c.customer_name, r.total_sales, r.total_profit,
+       r.sales_rank, r.profit_rank,
+       <span class="kw">CASE</span> r.sales_quartile
+           <span class="kw">WHEN</span> 1 <span class="kw">THEN</span> <span class="str">'Top 25%'</span>
+           <span class="kw">WHEN</span> 4 <span class="kw">THEN</span> <span class="str">'Bottom 25%'</span> ...
+       <span class="kw">END AS</span> customer_tier
+<span class="kw">FROM</span> ranked r <span class="kw">JOIN</span> customers c <span class="kw">USING</span>(customer_id)
+<span class="kw">ORDER BY</span> r.sales_rank <span class="kw">LIMIT</span> 10;</pre></div>
+
+    <table>
+      <thead><tr><th>Customer</th><th>Segment</th><th class="number">Sales</th><th class="number">Profit</th><th class="number">Orders</th><th class="number">Sales Rank</th><th class="number">Profit Rank</th><th>Tier</th></tr></thead>
+      <tbody>
+        <tr><td>Sean Miller</td><td>Home Office</td><td class="number">$25,043</td><td class="number neg">-$1,981</td><td class="number">5</td><td class="number">1</td><td class="number">786</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Tamara Chand</td><td>Corporate</td><td class="number">$19,052</td><td class="number pos">$8,981</td><td class="number">5</td><td class="number">2</td><td class="number">1</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Raymond Buch</td><td>Consumer</td><td class="number">$15,117</td><td class="number pos">$6,976</td><td class="number">6</td><td class="number">3</td><td class="number">2</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Tom Ashbrook</td><td>Home Office</td><td class="number">$14,596</td><td class="number pos">$4,704</td><td class="number">4</td><td class="number">4</td><td class="number">6</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Adrian Barton</td><td>Consumer</td><td class="number">$14,474</td><td class="number pos">$5,445</td><td class="number">10</td><td class="number">5</td><td class="number">5</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Ken Lonsdale</td><td>Consumer</td><td class="number">$14,175</td><td class="number pos">$807</td><td class="number">12</td><td class="number">6</td><td class="number">123</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Sanjit Chand</td><td>Consumer</td><td class="number">$14,142</td><td class="number pos">$5,757</td><td class="number">9</td><td class="number">7</td><td class="number">3</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+        <tr><td>Hunter Lopez</td><td>Consumer</td><td class="number">$12,873</td><td class="number pos">$5,622</td><td class="number">6</td><td class="number">8</td><td class="number">4</td><td><span class="tier-pill tier-1">Top 25%</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- BUSINESS QUERIES -->
+  <div id="business" class="section">
+    <div class="section-header">
+      <span class="section-badge badge-business">Business Queries</span>
+      <span class="section-title">Actionable insights for decision-makers</span>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('bq','bq1')">Top 5 Customers</div>
+      <div class="tab" onclick="switchTab('bq','bq2')">Bottom 5</div>
+      <div class="tab" onclick="switchTab('bq','bq3')">Single-Order</div>
+      <div class="tab" onclick="switchTab('bq','bq4')">Sub-Category vs Avg</div>
+    </div>
+
+    <div id="bq1" class="tab-content active">
+      <table>
+        <thead><tr><th>Rank</th><th>Customer</th><th>Segment</th><th class="number">Total Sales</th><th class="number">Total Profit</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rank-badge rank-1">1</span></td><td>Sean Miller</td><td>Home Office</td><td class="number">$25,043.05</td><td class="number neg">-$1,980.74</td></tr>
+          <tr><td><span class="rank-badge rank-2">2</span></td><td>Tamara Chand</td><td>Corporate</td><td class="number">$19,052.22</td><td class="number pos">$8,981.32</td></tr>
+          <tr><td><span class="rank-badge rank-3">3</span></td><td>Raymond Buch</td><td>Consumer</td><td class="number">$15,117.34</td><td class="number pos">$6,976.10</td></tr>
+          <tr><td><span class="rank-badge rank-n">4</span></td><td>Tom Ashbrook</td><td>Home Office</td><td class="number">$14,595.62</td><td class="number pos">$4,703.79</td></tr>
+          <tr><td><span class="rank-badge rank-n">5</span></td><td>Adrian Barton</td><td>Consumer</td><td class="number">$14,473.57</td><td class="number pos">$5,444.81</td></tr>
+        </tbody>
+      </table>
+      <div class="insight-box purple" style="margin-top:1rem">
+        <div class="insight-label">Business Insight</div>
+        <div class="insight-text">4 of the top 5 customers by revenue also show strong positive profit — except Sean Miller who despite the highest revenue generates a loss. Investigate discount strategy for this account.</div>
+      </div>
+    </div>
+
+    <div id="bq2" class="tab-content">
+      <table>
+        <thead><tr><th>Customer</th><th>Segment</th><th class="number">Total Sales</th><th class="number">Total Profit</th></tr></thead>
+        <tbody>
+          <tr><td>Thais Sissman</td><td>Consumer</td><td class="number">$4.83</td><td class="number neg">-$3.32</td></tr>
+          <tr><td>Lela Donovan</td><td>Corporate</td><td class="number">$5.30</td><td class="number pos">$0.46</td></tr>
+          <tr><td>Carl Jackson</td><td>Corporate</td><td class="number">$16.52</td><td class="number pos">$1.65</td></tr>
+          <tr><td>Mitch Gastineau</td><td>Corporate</td><td class="number">$16.74</td><td class="number neg">-$1.25</td></tr>
+          <tr><td>Roy Skaria</td><td>Home Office</td><td class="number">$22.33</td><td class="number pos">$9.58</td></tr>
+        </tbody>
+      </table>
+      <div class="insight-box amber" style="margin-top:1rem">
+        <div class="insight-label">Business Insight</div>
+        <div class="insight-text">Bottom customers have extremely low lifetime value (under $25). These are likely one-time low-value purchases. Re-engagement campaigns or segmentation as low-priority accounts is recommended.</div>
+      </div>
+    </div>
+
+    <div id="bq3" class="tab-content">
+      <table>
+        <thead><tr><th>Customer</th><th>Segment</th><th class="number">Orders</th></tr></thead>
+        <tbody>
+          <tr><td>Anemone Ratner</td><td>Consumer</td><td class="number">1</td></tr>
+          <tr><td>Anthony O'Donnell</td><td>Corporate</td><td class="number">1</td></tr>
+          <tr><td>Carl Jackson</td><td>Corporate</td><td class="number">1</td></tr>
+          <tr><td>Jenna Caffey</td><td>Consumer</td><td class="number">1</td></tr>
+          <tr><td>Jocasta Rupert</td><td>Consumer</td><td class="number">1</td></tr>
+          <tr><td>Lela Donovan</td><td>Corporate</td><td class="number">1</td></tr>
+          <tr><td>Mitch Gastineau</td><td>Corporate</td><td class="number">1</td></tr>
+          <tr><td>Patricia Hirasaki</td><td>Home Office</td><td class="number">1</td></tr>
+          <tr><td>Ricardo Emerson</td><td>Consumer</td><td class="number">1</td></tr>
+          <tr><td>Roland Murray</td><td>Consumer</td><td class="number">1</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:13px;color:#888;margin-top:8px">Total single-order customers: <strong>12 of 793</strong> (1.5%) — excellent retention signal overall</p>
+      <div class="insight-box green" style="margin-top:1rem">
+        <div class="insight-label">Business Insight</div>
+        <div class="insight-text">Only 1.5% of customers placed just one order — the store has strong repeat-purchase loyalty. Targeted follow-up emails or "second order" discount codes for these 12 customers could convert them to repeat buyers.</div>
+      </div>
+    </div>
+
+    <div id="bq4" class="tab-content">
+      <div class="chart-wrap">
+        <div class="chart-title">Sub-category total sales (store avg = $229.86/order)</div>
+        <div style="position:relative;height:500px">
+          <canvas id="subCatChart" role="img" aria-label="Horizontal bar chart of sales by sub-category. Phones and Chairs lead.">Top sub-categories: Phones $330K, Chairs $328K, Storage $224K, Tables $207K.</canvas>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Category</th><th>Sub-Category</th><th class="number">Total Sales</th><th class="number">Avg/Order</th><th class="number">Profit</th><th>vs Store Avg</th></tr></thead>
+        <tbody>
+          <tr><td>Technology</td><td>Phones</td><td class="number">$330,007</td><td class="number">$371</td><td class="number pos">$44,516</td><td><span class="above">Above Avg</span></td></tr>
+          <tr><td>Furniture</td><td>Chairs</td><td class="number">$328,449</td><td class="number">$532</td><td class="number pos">$26,590</td><td><span class="above">Above Avg</span></td></tr>
+          <tr><td>Office Supplies</td><td>Storage</td><td class="number">$223,844</td><td class="number">$265</td><td class="number pos">$21,279</td><td><span class="above">Above Avg</span></td></tr>
+          <tr><td>Furniture</td><td>Tables</td><td class="number">$206,966</td><td class="number">$649</td><td class="number neg">-$17,725</td><td><span class="above">Above Avg</span></td></tr>
+          <tr><td>Office Supplies</td><td>Binders</td><td class="number">$203,413</td><td class="number">$134</td><td class="number pos">$30,222</td><td><span class="below">Below Avg</span></td></tr>
+          <tr><td>Technology</td><td>Machines</td><td class="number">$189,239</td><td class="number">$1,646</td><td class="number pos">$3,385</td><td><span class="above">Above Avg</span></td></tr>
+          <tr><td>Technology</td><td>Copiers</td><td class="number">$149,528</td><td class="number">$2,199</td><td class="number pos">$55,618</td><td><span class="above">Above Avg</span></td></tr>
+          <tr><td>Furniture</td><td>Bookcases</td><td class="number">$114,880</td><td class="number">$504</td><td class="number neg">-$3,473</td><td><span class="above">Above Avg</span></td></tr>
+        </tbody>
+      </table>
+      <div class="insight-box pink" style="margin-top:1rem">
+        <div class="insight-label">Business Insight</div>
+        <div class="insight-text">Tables ($207K revenue) and Bookcases generate consistent losses despite above-average order sizes. Copiers have the highest profit margin per sub-category ($55.6K profit on $149K revenue = 37%). Consider repricing or discontinuing Tables.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function switchTab(group, id) {
+  document.querySelectorAll('#' + group + '1, #' + group + '2, #' + group + '3, #' + group + '4').forEach(el => {
+    if (el) el.classList.remove('active');
+  });
+  const target = document.getElementById(id);
+  if (target) target.classList.add('active');
+  const container = target ? target.closest('.section') : null;
+  if (container) {
+    container.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', t.textContent.trim() === event.target.textContent.trim());
+    });
+  }
+}
+
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+Chart.defaults.font.size = 12;
+
+new Chart(document.getElementById('catChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Technology', 'Furniture', 'Office Supplies'],
+    datasets: [
+      { label: 'Revenue', data: [836154, 741999, 719047], backgroundColor: '#3b82f6', borderRadius: 4 },
+      { label: 'Profit', data: [145455, 18451, 122491], backgroundColor: '#10b981', borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: true, position: 'top', labels: { usePointStyle: true, pointStyle: 'rect', boxWidth: 10 } } },
+    scales: {
+      y: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'K' }, grid: { color: '#f0ede6' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+new Chart(document.getElementById('subCatChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Phones','Chairs','Storage','Tables','Binders','Machines','Accessories','Copiers','Bookcases','Appliances','Furnishings','Paper'],
+    datasets: [{
+      label: 'Total Sales',
+      data: [330007,328449,223844,206966,203413,189239,167380,149528,114880,107532,91705,78479],
+      backgroundColor: (ctx) => ctx.raw > 229860 ? '#3b82f6' : '#94a3b8',
+      borderRadius: 3
+    }]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toLocaleString() } }
+    },
+    scales: {
+      x: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'K' }, grid: { color: '#f0ede6' } },
+      y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+    }
+  }
+});
+</script>
+</body>
+</html>
